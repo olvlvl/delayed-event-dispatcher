@@ -1,4 +1,4 @@
-# DelayedEventDispatcher
+# Delayed event dispatcher
 
 [![Release](https://img.shields.io/packagist/v/olvlvl/delayed-event-dispatcher.svg)](https://packagist.org/packages/olvlvl/delayed-event-dispatcher)
 [![Build Status](https://img.shields.io/travis/olvlvl/delayed-event-dispatcher.svg)](http://travis-ci.org/olvlvl/delayed-event-dispatcher)
