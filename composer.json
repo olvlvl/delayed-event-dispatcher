@@ -1,0 +1,27 @@
+{
+    "name": "olvlvl/delayed-event-dispatcher",
+    "description": "Delays the dispatching of events",
+    "keywords": [ "symfony", "event", "dispatcher", "delay" ],
+    "type": "library",
+    "license": "BSD-3-Clause",
+    "authors": [
+        {
+            "name": "Olivier Laviale",
+            "email": "olivier.laviale@gmail.com"
+        }
+    ],
+	"require": {
+		"php": ">=7.1.3",
+		"symfony/event-dispatcher": "^4.0"
+	},
+    "autoload": {
+		"psr-4": {
+			"olvlvl\\DelayedEventDispatcher\\": "lib"
+		}
+	},
+    "autoload-dev": {
+		"psr-4": {
+			"olvlvl\\DelayedEventDispatcher\\": "tests"
+		}
+	}
+}
