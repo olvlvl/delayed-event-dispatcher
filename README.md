@@ -11,15 +11,17 @@ in the application life.
 
 A delayed event dispatcher is useful to reduce the response time of your HTTP application when events can perfectly be
 dispatched after the response has been sent. For instance, updating an entity that would require clearing cache,
-performing projections, or reindexing, all of which have nothing to do with the response itself.
+performing projections, or reindexing, all of which have nothing to do with the response itself. Delayed events are
+dispatched when flushed, but you can choose another solution entirely, like sending them to consumers using [RabbitMQ][]
+or [Kafka][].
 
-Because you're probably using one event dispatcher for your application you don't want all events to be delayed, most of
+Because you're probably using one event dispatcher for your application you don't want all events to be delayed, some of
 them have to be dispatched immediately for your application to run properly, that's why you can specify an arbiter to
 determine which events to delay and which not to.
 
 Finally, because you want all delayed events to be dispatched when you flush them—even when an exception is thrown—you
-can provide an exception handler. It's up to you to decide what to do with them. You'll probably want to recover, log
-the exception, and continue with dispatching the other events.
+can provide an exception handler. It's up to you to decide what to do. You'll probably want to recover, log the
+exception, and continue with dispatching the other events.
 
 **Disclaimer:** The delayed event dispatcher is a decorator that is meant to be used together with
 [symfony/event-dispatcher][]. 
@@ -39,6 +41,7 @@ forwarded to the decorated instance, except of course for the `dispatch()` metho
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 
 /* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var callable $listener */
 
 $delayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher); 
 $delayedEventDispatcher->addListener('my_event', $listener);
@@ -84,9 +87,9 @@ $disabledDelayedEventDispatcher = new DelayedEventDispatcher(
 
 
 
-## Dispatching delayed events
+## Flushing delayed events
 
-Delayed events are dispatched with the `flush()` method.
+Delayed events are flushed (dispatched) with the `flush()` method.
 
 ```php
 <?php
@@ -98,6 +101,35 @@ use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 $delayedEventDispatcher->dispatch('my_event');
 $delayedEventDispatcher->dispatch('my_other_event');
 $delayedEventDispatcher->flush();
+```
+
+
+
+
+
+### Flushing delayed events with a custom flusher
+
+By default, events are dispatched with the decorated event dispatcher when flushed, but you can choose another solution
+entirely, like sending them to consumers using [RabbitMQ][] or [Kafka][].
+
+```php
+<?php
+
+use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
+use Symfony\Component\EventDispatcher\Event;
+
+/* @var \PhpAmqpLib\Channel\AMQPChannel $channel */
+/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+
+$messagingDelayedEventDispatcher = new DelayedEventDispatcher(
+    $eventDispatcher, 
+    true,
+    null,
+    null,
+    function (string $eventName, Event $event = null) use ($channel) {
+        $channel->basic_publish(json_encode($event), 'my_exchange', $eventName);
+    }
+);
 ```
 
 
@@ -117,7 +149,7 @@ use olvlvl\DelayedEventDispatcher\Delayable;
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 use Symfony\Component\EventDispatcher\Event;
 
-$arbiter = function (string $eventName, Event $event) {
+$arbiter = function (string $eventName, Event $event = null) {
     return $event instanceof Delayable;
 };
 
@@ -229,4 +261,6 @@ The package is continuously tested by [Travis CI](http://about.travis-ci.org/).
 
 
 
+[Kafka]: https://kafka.apache.org/
+[RabbitMQ]: https://www.rabbitmq.com/
 [symfony/event-dispatcher]: https://github.com/symfony/event-dispatcher

@@ -90,6 +90,36 @@ class DelayedEventDispatcherTest extends TestCase
     /**
      * @test
      */
+    public function shouldInvokeFlusher()
+    {
+        $eventName = uniqid();
+        $event = new class extends Event {
+        };
+        $invoked = false;
+
+        $dispatcher = $this->makeDelayedEventDispatcher(
+            function ($dispatcher) use ($eventName, $event) {
+                $dispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
+            },
+            false,
+            null,
+            null,
+            function (string $actualEventName, Event $actualEvent) use (&$invoked, $eventName, $event) {
+                $invoked = true;
+                $this->assertSame($eventName, $actualEventName);
+                $this->assertSame($event, $actualEvent);
+            }
+        );
+
+        $dispatcher->dispatch($eventName, $event);
+        $dispatcher->flush();
+
+        $this->assertTrue($invoked);
+    }
+
+    /**
+     * @test
+     */
     public function shouldDispatchImmediatelyWhenDisabled()
     {
         $eventName = uniqid();
@@ -282,7 +312,8 @@ class DelayedEventDispatcherTest extends TestCase
         callable $initEventDispatcher = null,
         $disabled = false,
         callable $delayArbiter = null,
-        callable $exceptionHandler = null
+        callable $exceptionHandler = null,
+        callable $flusher = null
     ): DelayedEventDispatcher {
         $eventDispatcher = $this->prophesize(EventDispatcherInterface::class);
 
@@ -290,6 +321,12 @@ class DelayedEventDispatcherTest extends TestCase
             $initEventDispatcher($eventDispatcher);
         }
 
-        return new DelayedEventDispatcher($eventDispatcher->reveal(), $disabled, $delayArbiter, $exceptionHandler);
+        return new DelayedEventDispatcher(
+            $eventDispatcher->reveal(),
+            $disabled,
+            $delayArbiter,
+            $exceptionHandler,
+            $flusher
+        );
     }
 }

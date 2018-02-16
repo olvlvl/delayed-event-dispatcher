@@ -38,6 +38,11 @@ class DelayedEventDispatcher implements EventDispatcherInterface
     private $exceptionHandler;
 
     /**
+     * @var callable
+     */
+    private $flusher;
+
+    /**
      * @var array
      */
     private $queue = [];
@@ -53,12 +58,16 @@ class DelayedEventDispatcher implements EventDispatcherInterface
      *     callable with the following signature:
      *     `function(\Throwable $exception, string $eventName, Event $event = null): void`. The default exception
      *     handler just throws the exception.
+     * @param callable|null $flusher By default, delayed events are dispatched with the decorated event dispatcher
+     *     when flushed, but you can choose another solution entirely, like sending them to consumers using RabbitMQ or
+     *     Kafka. The callable has the following signature: `function(string $eventName, Event $event = null): void`.
      */
     public function __construct(
         EventDispatcherInterface $eventDispatcher,
         bool $disabled = false,
         callable $delayArbiter = null,
-        callable $exceptionHandler = null
+        callable $exceptionHandler = null,
+        callable $flusher = null
     ) {
         $this->eventDispatcher = $eventDispatcher;
         $this->enabled = !$disabled;
@@ -67,6 +76,9 @@ class DelayedEventDispatcher implements EventDispatcherInterface
         };
         $this->exceptionHandler = $exceptionHandler ?: function (\Throwable $exception) {
             throw $exception;
+        };
+        $this->flusher = $flusher ?: function (string $eventName, Event $event) {
+            $this->eventDispatcher->dispatch($eventName, $event);
         };
     }
 
@@ -152,7 +164,7 @@ class DelayedEventDispatcher implements EventDispatcherInterface
             list($eventName, $event) = $queued;
 
             try {
-                $this->eventDispatcher->dispatch($eventName, $event);
+                ($this->flusher)($eventName, $event);
             } catch (\Throwable $e) {
                 ($this->exceptionHandler)($e, $eventName, $event);
             }
