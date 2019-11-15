@@ -11,8 +11,7 @@
 
 namespace olvlvl\DelayedEventDispatcher;
 
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
 class DelayedEventDispatcher implements EventDispatcherInterface
@@ -43,7 +42,7 @@ class DelayedEventDispatcher implements EventDispatcherInterface
     private $flusher;
 
     /**
-     * @var array
+     * @var object[]
      */
     private $queue = [];
 
@@ -77,79 +76,23 @@ class DelayedEventDispatcher implements EventDispatcherInterface
         $this->exceptionHandler = $exceptionHandler ?: function (Throwable $exception) {
             throw $exception;
         };
-        $this->flusher = $flusher ?: function ($event, string $eventName = null) {
-            $this->eventDispatcher->dispatch($event, $eventName);
+        $this->flusher = $flusher ?: function (object $event): object {
+            return $this->eventDispatcher->dispatch($event);
         };
     }
 
     /**
      * @inheritdoc
      */
-    public function dispatch($event, $eventName = null)
+    public function dispatch(object $event): object
     {
-        if ($this->shouldDelay($event, $eventName)) {
-            $this->queue[] = [ $event, $eventName ];
+        if ($this->shouldDelay($event)) {
+            $this->queue[] = $event;
 
             return $event;
         }
 
-        return $this->eventDispatcher->dispatch($event, $eventName);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function addListener($eventName, $listener, $priority = 0)
-    {
-        $this->eventDispatcher->addListener($eventName, $listener, $priority);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function addSubscriber(EventSubscriberInterface $subscriber)
-    {
-        $this->eventDispatcher->addSubscriber($subscriber);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function removeListener($eventName, $listener)
-    {
-        $this->eventDispatcher->removeListener($eventName, $listener);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function removeSubscriber(EventSubscriberInterface $subscriber)
-    {
-        $this->eventDispatcher->removeSubscriber($subscriber);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function getListeners($eventName = null)
-    {
-        return $this->eventDispatcher->getListeners($eventName);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function getListenerPriority($eventName, $listener)
-    {
-        return $this->eventDispatcher->getListenerPriority($eventName, $listener);
-    }
-
-    /**
-     * @inheritdoc
-     */
-    public function hasListeners($eventName = null)
-    {
-        return $this->eventDispatcher->hasListeners($eventName);
+        return $this->eventDispatcher->dispatch($event);
     }
 
     /**
@@ -160,19 +103,17 @@ class DelayedEventDispatcher implements EventDispatcherInterface
      */
     public function flush()
     {
-        while (($queued = array_shift($this->queue))) {
-            [ $event, $eventName ] = $queued;
-
+        while (($event = array_shift($this->queue))) {
             try {
-                ($this->flusher)($event, $eventName);
+                ($this->flusher)($event);
             } catch (Throwable $e) {
-                ($this->exceptionHandler)($e, $event, $eventName);
+                ($this->exceptionHandler)($e, $event);
             }
         }
     }
 
-    private function shouldDelay($event, $eventName = null): bool
+    private function shouldDelay(object $event): bool
     {
-        return $this->enabled && ($this->delayArbiter)($event, $eventName);
+        return $this->enabled && ($this->delayArbiter)($event);
     }
 }

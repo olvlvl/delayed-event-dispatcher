@@ -24,7 +24,7 @@ can provide an exception handler. It's up to you to decide what to do. You'll pr
 exception, and continue with dispatching the other events.
 
 **Disclaimer:** The delayed event dispatcher is a decorator that is meant to be used together with
-[symfony/event-dispatcher][]. 
+[psr/event-dispatcher][]. 
 
 
 
@@ -32,19 +32,16 @@ exception, and continue with dispatching the other events.
 
 ## Instantiating a delayed event dispatcher
 
-The delayed event dispatcher is a decorator, which means you'll need another event dispatcher to decorate. Methods are
-forwarded to the decorated instance, except of course for the `dispatch()` method.
+The delayed event dispatcher is a decorator, which means you'll need another event dispatcher to decorate.
 
 ```php
 <?php
 
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
-/* @var callable $listener */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $delayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher); 
-$delayedEventDispatcher->addListener('my_event', $listener);
 ```
 
 
@@ -62,7 +59,7 @@ delayed event dispatcher be defining the `disabled` option as `true`.
 
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $disabledDelayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher, true);
 ```
@@ -75,7 +72,7 @@ can customize using environment variables.
 
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $disabledDelayedEventDispatcher = new DelayedEventDispatcher(
     $eventDispatcher, 
@@ -98,8 +95,8 @@ use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
 
 /* @var DelayedEventDispatcher $delayedEventDispatcher */
 
-$delayedEventDispatcher->dispatch('my_event');
-$delayedEventDispatcher->dispatch('my_other_event');
+$delayedEventDispatcher->dispatch($event1);
+$delayedEventDispatcher->dispatch($event2);
 $delayedEventDispatcher->flush();
 ```
 
@@ -116,18 +113,17 @@ entirely, like sending them to consumers using [RabbitMQ][] or [Kafka][].
 <?php
 
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
-use Symfony\Component\EventDispatcher\Event;
 
 /* @var \PhpAmqpLib\Channel\AMQPChannel $channel */
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $messagingDelayedEventDispatcher = new DelayedEventDispatcher(
     $eventDispatcher, 
     true,
     null,
     null,
-    function (string $eventName, Event $event = null) use ($channel) {
-        $channel->basic_publish(json_encode($event), 'my_exchange', $eventName);
+    function (object $event) use ($channel) {
+        $channel->basic_publish(json_encode($event), 'my_exchange', $event->getName());
     }
 );
 ```
@@ -147,13 +143,12 @@ but it's not a requirement. The arbiter is a simple callable, its implementation
 
 use olvlvl\DelayedEventDispatcher\Delayable;
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
-use Symfony\Component\EventDispatcher\Event;
 
-$arbiter = function (string $eventName, Event $event = null) {
+$arbiter = function (object $event) {
     return $event instanceof Delayable;
 };
 
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $disabledDelayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher, false, $arbiter);
 ```
@@ -172,16 +167,15 @@ want to provide and exception handler.
 <?php
 
 use olvlvl\DelayedEventDispatcher\DelayedEventDispatcher;
-use Symfony\Component\EventDispatcher\Event;
 
 /* @var \Psr\Log\LoggerInterface $logger */
 
-$exceptionHandler = function (\Throwable $error, string $eventName, Event $event = null) use ($logger) {
+$exceptionHandler = function (\Throwable $error, object $event) use ($logger) {
     // The exception is recovered, we log it to fix it later
     $logger->danger($error);
 };
 
-/* @var \Symfony\Component\EventDispatcher\EventDispatcherInterface $eventDispatcher */
+/* @var \Psr\EventDispatcher\EventDispatcherInterface $eventDispatcher */
 
 $disabledDelayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher, false, null, $exceptionHandler);
 ```
@@ -198,7 +192,7 @@ $disabledDelayedEventDispatcher = new DelayedEventDispatcher($eventDispatcher, f
 
 ## Requirements
 
-The package requires PHP 7.1 or later.
+The package requires PHP 7.2 or later.
 
 
 
@@ -263,4 +257,4 @@ The package is continuously tested by [Travis CI](http://about.travis-ci.org/).
 
 [Kafka]: https://kafka.apache.org/
 [RabbitMQ]: https://www.rabbitmq.com/
-[symfony/event-dispatcher]: https://github.com/symfony/event-dispatcher
+[psr/event-dispatcher]: https://github.com/php-fig/event-dispatcher

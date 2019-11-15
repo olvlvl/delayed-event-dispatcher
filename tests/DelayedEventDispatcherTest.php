@@ -14,30 +14,41 @@ namespace olvlvl\DelayedEventDispatcher;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Prophecy\Argument;
-use Symfony\Component\EventDispatcher\EventDispatcherInterface;
-use Symfony\Component\EventDispatcher\EventSubscriberInterface;
-use Symfony\Contracts\EventDispatcher\Event;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
-class DelayedEventDispatcherTest extends TestCase
+/**
+ * @group unit
+ */
+final class DelayedEventDispatcherTest extends TestCase
 {
+    /**
+     * @var EventDispatcherInterface
+     */
+    private $eventDispatcher;
+
+    protected function setUp(): void
+    {
+        $this->eventDispatcher = $this->prophesize(EventDispatcherInterface::class);
+
+        parent::setUp();
+    }
+
     /**
      * @test
      */
-    public function shouldThrowException()
+    public function shouldThrowException(): void
     {
-        $eventName = uniqid();
-        $event = new class extends Event {
+        $event = new class {
         };
         $exception = new Exception;
 
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($event, $eventName, $exception) {
-                $dispatcher->dispatch($event, $eventName)->shouldBeCalled()->willThrow($exception);
-            }
-        );
+        $this->eventDispatcher->dispatch($event)
+            ->shouldBeCalled()->willThrow($exception);
 
-        $dispatcher->dispatch($event, $eventName);
+        $dispatcher = $this->makeDelayedEventDispatcher();
+
+        $dispatcher->dispatch($event);
 
         try {
             $dispatcher->flush();
@@ -52,38 +63,33 @@ class DelayedEventDispatcherTest extends TestCase
     /**
      * @test
      */
-    public function shouldInvokeExceptionHandler()
+    public function shouldInvokeExceptionHandler(): void
     {
-        $event = new class extends Event {
+        $event = new class {
         };
-        $eventName = uniqid();
         $exception = new Exception;
         $invoked = false;
 
+        $this->eventDispatcher->dispatch($event)->shouldBeCalled()->willThrow($exception);
+
         $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($event, $eventName, $exception) {
-                $dispatcher->dispatch($event, $eventName)->shouldBeCalled()->willThrow($exception);
-            },
             false,
             null,
             function (
                 Throwable $actualException,
-                $actualEvent,
-                $actualEventName = null
+                $actualEvent
             ) use (
                 &$invoked,
                 $event,
-                $eventName,
                 $exception
             ) {
                 $invoked = true;
                 $this->assertSame($exception, $actualException);
                 $this->assertSame($event, $actualEvent);
-                $this->assertSame($eventName, $actualEventName);
             }
         );
 
-        $dispatcher->dispatch($event, $eventName);
+        $dispatcher->dispatch($event);
         $dispatcher->flush();
 
         $this->assertTrue($invoked);
@@ -92,28 +98,25 @@ class DelayedEventDispatcherTest extends TestCase
     /**
      * @test
      */
-    public function shouldInvokeFlusher()
+    public function shouldInvokeFlusher(): void
     {
-        $event = new class extends Event {
+        $event = new class {
         };
-        $eventName = uniqid();
         $invoked = false;
 
+        $this->eventDispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
+
         $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($event, $eventName) {
-                $dispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
-            },
             false,
             null,
             null,
-            function ($actualEvent, string $actualEventName) use (&$invoked, $event, $eventName) {
+            function ($actualEvent) use (&$invoked, $event) {
                 $invoked = true;
                 $this->assertSame($event, $actualEvent);
-                $this->assertSame($eventName, $actualEventName);
             }
         );
 
-        $dispatcher->dispatch($event, $eventName);
+        $dispatcher->dispatch($event);
         $dispatcher->flush();
 
         $this->assertTrue($invoked);
@@ -122,38 +125,31 @@ class DelayedEventDispatcherTest extends TestCase
     /**
      * @test
      */
-    public function shouldDispatchImmediatelyWhenDisabled()
+    public function shouldDispatchImmediatelyWhenDisabled(): void
     {
-        $event = new class extends Event {
+        $event = new class {
         };
-        $eventName = uniqid();
+
+        $this->eventDispatcher->dispatch($event)->shouldBeCalled()->willReturn($event);
 
         $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($event, $eventName) {
-                $dispatcher->dispatch($event, $eventName)->shouldBeCalled();
-            },
             true
         );
 
-        $dispatcher->dispatch($event, $eventName);
+        $this->assertSame($event, $dispatcher->dispatch($event));
     }
 
     /**
      * @test
      */
-    public function shouldDelayDispatchWhenEnabled()
+    public function shouldDelayDispatchWhenEnabled(): void
     {
-        $event = new class extends Event {
+        $event = new class {
         };
-        $eventName = uniqid();
 
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) {
-                $dispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
-            }
-        );
+        $this->eventDispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
 
-        $dispatcher->dispatch($event, $eventName);
+        $this->makeDelayedEventDispatcher()->dispatch($event);
     }
 
     /**
@@ -166,28 +162,25 @@ class DelayedEventDispatcherTest extends TestCase
      */
     public function shouldDispatchAccordingToStateAndArbiter(bool $disabled, bool $decision, bool $shouldDelay)
     {
-        $event = new class extends Event {
+        $event = new class {
         };
-        $eventName = uniqid();
+
+        if ($shouldDelay) {
+            $this->eventDispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
+        } else {
+            $this->eventDispatcher->dispatch($event)->shouldBeCalled()->willReturn($event);
+        }
 
         $dispatcher = $this->makeDelayedEventDispatcher(
-            $shouldDelay
-                ? function ($dispatcher) {
-                    $dispatcher->dispatch(Argument::any(), Argument::any())->shouldNotBeCalled();
-                }
-                : function ($dispatcher) use ($event, $eventName) {
-                    $dispatcher->dispatch($event, $eventName)->shouldBeCalled()->willReturn($event);
-                },
             $disabled,
-            function ($actualEvent, $actualEventName) use ($decision, $event, $eventName) {
+            function ($actualEvent) use ($decision, $event) {
                 $this->assertSame($event, $actualEvent);
-                $this->assertSame($eventName, $actualEventName);
 
                 return $decision;
             }
         );
 
-        $this->assertSame($event, $dispatcher->dispatch($event, $eventName));
+        $this->assertSame($event, $dispatcher->dispatch($event));
     }
 
     public function provideDispatchAccordingToStateAndArbiter(): array
@@ -202,129 +195,14 @@ class DelayedEventDispatcherTest extends TestCase
         ];
     }
 
-    public function testAddListener()
-    {
-        $eventName = uniqid();
-        $listener = function () {
-        };
-        $priority = mt_rand(10, 20);
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($eventName, $listener, $priority) {
-                $dispatcher->addListener($eventName, $listener, $priority)
-                    ->shouldBeCalled();
-            }
-        );
-
-        $dispatcher->addListener($eventName, $listener, $priority);
-    }
-
-    public function testRemoveListener()
-    {
-        $eventName = uniqid();
-        $listener = function () {
-        };
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($eventName, $listener) {
-                $dispatcher->removeListener($eventName, $listener)
-                    ->shouldBeCalled();
-            }
-        );
-
-        $dispatcher->removeListener($eventName, $listener);
-    }
-
-    public function testGetListeners()
-    {
-        $eventName = uniqid();
-        $listeners = [ function () {
-        } ];
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($eventName, $listeners) {
-                $dispatcher->getListeners($eventName)
-                    ->shouldBeCalled()->willReturn($listeners);
-            }
-        );
-
-        $this->assertSame($listeners, $dispatcher->getListeners($eventName));
-    }
-
-    public function testHasListeners()
-    {
-        $eventName = uniqid();
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($eventName) {
-                $dispatcher->hasListeners($eventName)
-                    ->shouldBeCalled()->willReturn(true);
-            }
-        );
-
-        $this->assertTrue($dispatcher->hasListeners($eventName));
-    }
-
-    public function testGetListenerPriority()
-    {
-        $eventName = uniqid();
-        $listener = function () {
-        };
-        $priority = mt_rand(10, 20);
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($eventName, $listener, $priority) {
-                $dispatcher->getListenerPriority($eventName, $listener)
-                    ->shouldBeCalled()->willReturn($priority);
-            }
-        );
-
-        $this->assertSame($priority, $dispatcher->getListenerPriority($eventName, $listener));
-    }
-
-    public function testAddSubscriber()
-    {
-        $subscriber = $this->prophesize(EventSubscriberInterface::class)->reveal();
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($subscriber) {
-                $dispatcher->addSubscriber($subscriber)
-                    ->shouldBeCalled();
-            }
-        );
-
-        $dispatcher->addSubscriber($subscriber);
-    }
-
-    public function testRemoveSubscriber()
-    {
-        $subscriber = $this->prophesize(EventSubscriberInterface::class)->reveal();
-
-        $dispatcher = $this->makeDelayedEventDispatcher(
-            function ($dispatcher) use ($subscriber) {
-                $dispatcher->removeSubscriber($subscriber)
-                    ->shouldBeCalled();
-            }
-        );
-
-        $dispatcher->removeSubscriber($subscriber);
-    }
-
     private function makeDelayedEventDispatcher(
-        callable $initEventDispatcher = null,
         $disabled = false,
         callable $delayArbiter = null,
         callable $exceptionHandler = null,
         callable $flusher = null
     ): DelayedEventDispatcher {
-        $eventDispatcher = $this->prophesize(EventDispatcherInterface::class);
-
-        if ($initEventDispatcher) {
-            $initEventDispatcher($eventDispatcher);
-        }
-
         return new DelayedEventDispatcher(
-            $eventDispatcher->reveal(),
+            $this->eventDispatcher->reveal(),
             $disabled,
             $delayArbiter,
             $exceptionHandler,
